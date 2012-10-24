@@ -11,14 +11,11 @@
 @implementation Options
 
 @synthesize optionsDelegate;
-@synthesize tableView;
+@synthesize tv;
 
-- (id)initWithStyle:(UITableViewStyle)style
+- (id)initWithNibName:(NSString *)nibNameOrNil bundle:(NSBundle *)nibBundleOrNil
 {
-    self = [super initWithStyle:style];
-    if (self) {
-        // Custom initialization
-    }
+    self = [super initWithNibName:nibNameOrNil bundle:nibBundleOrNil];    
     return self;
 }
 
@@ -29,6 +26,8 @@
     
     // Release any cached data, images, etc that aren't in use.
 }
+
+
 
 #pragma mark - View lifecycle
 
@@ -60,6 +59,19 @@
 
 - (void)viewWillAppear:(BOOL)animated
 {
+    // Get device specific dimensions
+    CGRect screenRect = [[UIScreen mainScreen] bounds];
+    screenWidth = screenRect.size.width;
+    screenHeight = screenRect.size.height;
+    wRatio = screenWidth/320;
+    hRatio = screenHeight/480;
+        
+    tv = [[UITableView alloc] initWithFrame:CGRectMake(0, 0, screenWidth, screenHeight)];
+    tv.backgroundColor = [UIColor clearColor];
+    tv.delegate = self;
+    tv.dataSource = self;
+    [self.view addSubview:tv];
+
     [super viewWillAppear:animated];
 }
 
@@ -81,7 +93,7 @@
 - (BOOL)shouldAutorotateToInterfaceOrientation:(UIInterfaceOrientation)interfaceOrientation
 {
     // Return YES for supported orientations
-    return (interfaceOrientation == UIInterfaceOrientationPortrait);
+    return NO;
 }
 
 #pragma mark - Table view data source
@@ -98,13 +110,28 @@
     return options.count;
 }
 
+
+- (CGFloat)tableView:(UITableView *)tableView heightForRowAtIndexPath:(NSIndexPath *)indexPath
+{
+    UILabel* lblCount = [[UILabel alloc] initWithFrame:CGRectZero];
+    lblCount.font = [UIFont systemFontOfSize:18 * wRatio];
+    lblCount.text = [options objectAtIndex:indexPath.row];
+    lblCount.lineBreakMode = UILineBreakModeWordWrap;
+    lblCount.numberOfLines = 0;
+    [lblCount sizeToFit];
+    
+    return lblCount.frame.size.height + 10;
+}
+
 - (UITableViewCell *)tableView:(UITableView *)tableView cellForRowAtIndexPath:(NSIndexPath *)indexPath
 {
+    
     UITableViewCell* cell = [[UITableViewCell alloc] 
                              initWithStyle:UITableViewCellStyleDefault 
                              reuseIdentifier:@"cell"];
 
     cell.textLabel.text = [options objectAtIndex:indexPath.row];
+    cell.textLabel.font = [UIFont systemFontOfSize:18*wRatio];
 
     return cell;
 }

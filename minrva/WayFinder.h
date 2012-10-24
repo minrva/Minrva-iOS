@@ -10,21 +10,33 @@
 
 @interface WayFinder : UIViewController<UIGestureRecognizerDelegate>
 {
-    NSMutableData* responseData;
-    NSURLConnection* theConnection;
+    // Device Specific Dimensions
+    CGFloat screenWidth;
+    CGFloat screenHeight;
+    CGFloat wRatio;
+    CGFloat hRatio;
 
+    // Settings
     NSString* wayfinder_service;
     NSString* jpg_service;
     
-    // Interface 
-    IBOutlet UILabel* info;
-    IBOutlet UIScrollView* scrollView; 
-    IBOutlet UIImageView *imageView;
+    // Views
+    UIView* main;
+    UIImageView *imageView;
+
+    // Data
+    NSMutableData* responseData;
+    NSURLConnection* theConnection;
 }
 
-@property (nonatomic,retain) UILabel* info;
-@property (nonatomic,retain) UIScrollView* scrollView;
+@property (nonatomic) CGFloat screenWidth;
+@property (nonatomic) CGFloat screenHeight;
+@property (nonatomic) CGFloat wRatio;
+@property (nonatomic) CGFloat hRatio;
+
+@property (nonatomic,retain) UIView* main;
 @property (nonatomic,retain) UIImageView* imageView;
+
 @property (copy, nonatomic) NSString *wayfinder_service;
 @property (copy, nonatomic) NSString *jpg_service;
 

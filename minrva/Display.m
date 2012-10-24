@@ -11,36 +11,46 @@
 #import "SBJson.h"
 #import "UIImageView+WebCache.h"
 #import "AppDelegate.h"
-#import "UILabel+dynamicSizeMe.h"
-
+#import "Reachability.h"
+#import"OHAttributedLabel.h"
+#import "NSAttributedString+Attributes.h"
 
 @implementation Display
 
-@synthesize lblTitle;
-@synthesize lblAuthor;
-@synthesize imageView;
+@synthesize screenWidth;
+@synthesize screenHeight;
+@synthesize wRatio;
+@synthesize hRatio;
 
-@synthesize lblLibrary;
-@synthesize lblPublisher;
-@synthesize lblPubyear;
-@synthesize lblFormat;
-
-@synthesize lblHoldings;
-@synthesize lblDescription;
-@synthesize lblSummary;
+@synthesize display_service;
 
 @synthesize scroller;
-@synthesize display_service;
+
+@synthesize strTitle;
+@synthesize strAuthor;
+
+@synthesize strThumbnail;
+
+@synthesize strLibrary;
+@synthesize strPublisher;
+@synthesize strPubyear;
+@synthesize strFormat;
+
+@synthesize strLocations;
+@synthesize strStatuses;
+@synthesize strCallNums;
+
+@synthesize strSummary;
 
 - (id)initWithNibName:(NSString *)nibNameOrNil bundle:(NSBundle *)nibBundleOrNil
 {
     self = [super initWithNibName:nibNameOrNil bundle:nibBundleOrNil];
-    if (self) {
+    
+    if (self)
+    {
         self.title = NSLocalizedString(@"Home", @"First");
         self.tabBarItem.image = [UIImage imageNamed:@"first"];
     }
-    
-    
     
     return self;
 }
@@ -48,33 +58,49 @@
 - (void)didReceiveMemoryWarning
 {
     [super didReceiveMemoryWarning];
-    // Release any cached data, images, etc that aren't in use.
 }
 
 #pragma mark - View lifecycle
-
 - (void)viewDidLoad
 {
-
-    [super viewDidLoad];
-        
-    //[scrollView setScrollEnabled:YES];
-    //[scrollView setContentSize:CGSizeMake(320, 650)];
-    
+    [super viewDidLoad];    
 }
 
 - (void)viewDidUnload
 {
     [super viewDidUnload];
-    
-  
-    
-    // Release any retained subviews of the main view.
-    // e.g. self.myOutlet = nil;
 }
 
 - (void)viewWillAppear:(BOOL)animated
 {
+    // Get device specific dimensions
+    CGRect screenRect = [[UIScreen mainScreen] bounds];
+    screenWidth = screenRect.size.width;
+    screenHeight = screenRect.size.height;
+    wRatio = screenWidth/320;
+    hRatio = screenHeight/480;
+    
+    // Create Main Layout (background image, title bar, scrollable list)
+    UIImageView* bgImage = [[UIImageView alloc] initWithFrame:CGRectMake(0, 0, screenWidth, screenHeight)];
+    [bgImage  setImage:[UIImage imageNamed:@"background"]];
+    [self.view addSubview:bgImage];
+    
+    UIImageView* titleBar = [[UIImageView alloc] initWithFrame:CGRectMake(0, 0, screenWidth, 48 * hRatio)];
+    [titleBar  setImage:[UIImage imageNamed:@"header"]];
+    [self.view addSubview:titleBar];
+    
+    float titleWidth = 68 * wRatio;
+    float titleX = titleBar.frame.size.width/2 - titleWidth/2;
+    UIImageView* title = [[UIImageView alloc] initWithFrame:CGRectMake(titleX, 0, titleWidth, titleBar.frame.size.height)];
+    [title setImage:[UIImage imageNamed:@"title"]];
+    [self.view addSubview:title];
+    
+    
+    float contentHeight = screenHeight - titleBar.frame.size.height - self.tabBarController.tabBar.frame.size.height;
+    scroller = [[UIScrollView alloc] initWithFrame:CGRectMake(0, titleBar.frame.size.height, screenWidth, contentHeight)];
+    [self.view addSubview:scroller];
+    
+    
     // Get root uri from properties.plist
     NSString* plistPath = [[NSBundle mainBundle] pathForResource:@"properties" ofType:@"plist"];
     NSData *plistXML = [[NSFileManager defaultManager] contentsAtPath:plistPath];
@@ -84,23 +110,35 @@
                                           format:nil
                                           errorDescription:nil];
     self.display_service = [temp objectForKey:@"display_service"];
+    
+    // Initialize values
+    self.strTitle = @"";
+    self.strAuthor = @"";
+    
+    self.strLibrary = @"";
+    self.strPublisher = @"";
+    self.strPubyear = @"";
+    self.strFormat = @"";
+    
+    self.strLocations = nil;
+    self.strStatuses = nil;
+    self.strCallNums = nil;
+    
+    self.strSummary = @"";
+    self.strThumbnail = @"";
 
-    // Build uri
+    // Build uri from unique id
     NSString *url = self.display_service;
-    AppDelegate* appDel = (AppDelegate*)[[UIApplication sharedApplication] delegate];    
+    AppDelegate* appDel = (AppDelegate*)[[UIApplication sharedApplication] delegate];
     url = [url stringByAppendingString:appDel.bibId];
 
-    NSLog(url);
-    
-    // Get some JSON
+    // Load JSON into views
     responseData = [NSMutableData data];
     NSURLRequest *theRequest=[NSURLRequest requestWithURL:[NSURL URLWithString:url]
 											  cachePolicy:NSURLRequestUseProtocolCachePolicy
 										  timeoutInterval:60.0];
-    theConnection = [[NSURLConnection alloc] initWithRequest:theRequest delegate:self];
-    
-    
-    
+    connection = [[NSURLConnection alloc] initWithRequest:theRequest delegate:self];
+
     [super viewWillAppear:animated];
 }
 
@@ -112,31 +150,58 @@
 - (void)viewWillDisappear:(BOOL)animated
 {
 	[super viewWillDisappear:animated];
-    // Interface elements
-    for (UIView *subview in [self.scroller subviews])
-        [subview removeFromSuperview];
-
-
 }
 
 - (void)viewDidDisappear:(BOOL)animated
 {
-	[super viewDidDisappear:animated];
+    // Remove dynamic layout elements from scroll view
+    for (UIView *subview in [self.scroller subviews])
+    {
+         for (UIView *subview2 in [subview subviews])
+             [subview2 removeFromSuperview];
+        [subview removeFromSuperview];
+    }
+    
+    // Remove dynamic layout elements from main view
+    for (UIView *subview in [self.view subviews])
+        [subview removeFromSuperview];
 
+    
+    // Device Specific Dimensions
+    display_service = nil;
+    
+    // Views
+    scroller = nil;
+    
+    // Data
+    strTitle = nil;
+    strAuthor = nil;
+    
+    strThumbnail = nil;
+    
+    strLibrary = nil;
+    strPublisher = nil;
+    strPubyear = nil;
+    strFormat = nil;
+    
+    strLocations = nil;
+    strStatuses = nil;
+    strCallNums = nil;
+    strSummary = nil;
+    
+    // JSON Feed
+    responseData = nil;
+    connection = nil;
+
+	[super viewDidDisappear:animated];
 }
 
 - (BOOL)shouldAutorotateToInterfaceOrientation:(UIInterfaceOrientation)interfaceOrientation
 {
-    // Return YES for supported orientations
-    if ([[UIDevice currentDevice] userInterfaceIdiom] == UIUserInterfaceIdiomPhone) {
-        return (interfaceOrientation != UIInterfaceOrientationPortraitUpsideDown);
-    } else {
-        return YES;
-    }
+    return NO;
 }
 
 #pragma mark NSURLConnectionDelegate methods
-
 - (void)connection:(NSURLConnection *)connection didReceiveResponse:(NSURLResponse *)response {
 	NSLog(@"Connection didReceiveResponse: %@ - %@", response, [response MIMEType]);
     [responseData setLength:0];
@@ -151,148 +216,368 @@
     [responseData appendData:data];
 }
 
-- (void)connection:(NSURLConnection *)connection didFailWithError:(NSError *)error {
+- (void)connection:(NSURLConnection *)connection didFailWithError:(NSError *)error
+{
+    // Alert user
+    if([error code] == -1009)
+    {
+        UIAlertView *alert = [[UIAlertView alloc]initWithTitle: @"Connection Failed"
+                                                   message: @"No internet connection is detected."
+                                                  delegate: self
+                                         cancelButtonTitle:nil
+                                         otherButtonTitles:@"OK",nil];
+        [alert show];
+        
+        // Display default
+        [self loadDynamicLayout];
+    }
+    
+    // Log
     NSLog(@"Connection failed! Error - %@ %@",
           [error localizedDescription],
           [[error userInfo] objectForKey:NSURLErrorFailingURLStringErrorKey]);
 }
 
-- (void)connectionDidFinishLoading:(NSURLConnection *)connection {
-    
+- (void)connectionDidFinishLoading:(NSURLConnection *)connection
+{
     // Get response string
     NSString *responseString = [[NSString alloc] initWithData:responseData encoding:NSUTF8StringEncoding];  
-    
-    // Get JSON object
     NSDictionary *descr = [responseString JSONValue];
     
     // Get data
-    NSString* strTitle = [descr objectForKey:@"title"];
-    NSString* strAuthor = [descr objectForKey:@"author"];
-
-    NSString* strLibrary = [descr objectForKey:@"library"];
-    NSString* strPublisher = [descr objectForKey:@"publisher"];
-    NSString* strPubyear = [descr objectForKey:@"pubyear"];
-    NSString* strFormat = [descr objectForKey:@"format"];
+    strTitle = [descr objectForKey:@"title"];
+    strAuthor = [descr objectForKey:@"author"];
+        
+    strLibrary = [descr objectForKey:@"library"];
+    strPublisher = [descr objectForKey:@"publisher"];
+    strPubyear = [descr objectForKey:@"pubyear"];
+    strFormat = [descr objectForKey:@"format"];
+        
+    strLocations = [descr objectForKey:@"locations"];
+    strStatuses = [descr objectForKey:@"statuses"];
+    strCallNums = [descr objectForKey:@"callnums"];
+        
+    strSummary = [descr objectForKey:@"summary"];
+    strThumbnail = [descr objectForKey:@"thumbnail"];
     
-    NSString* strSummary = [descr objectForKey:@"summary"];
-    NSString* strThumbnail = [descr objectForKey:@"thumbnail"];
+    // Build Dynamic Layout
+    [self loadDynamicLayout];
+}
 
+-(void)loadDynamicLayout
+{
+    float large_font_size = 18 * wRatio;                   
+    float medium_font_size = 16 * wRatio;                   
+    float small_font_size = 14 * wRatio;                  
+
+    // Dynamic calculations
     float totalHeight = 0;
     
-    // Add title and author
+    // Add title
+    UILabel* lblTitle = [[UILabel alloc] initWithFrame:CGRectMake(5 * wRatio, totalHeight, screenWidth - (2 * 5) * wRatio, 1)];
+    lblTitle.font = [UIFont systemFontOfSize:large_font_size];
+    lblTitle.backgroundColor = [UIColor clearColor];
+    lblTitle.lineBreakMode = UILineBreakModeWordWrap;
+    lblTitle.numberOfLines = 0;
     if([strTitle length] != 0)
-    {
-        lblTitle = [[UILabel alloc] initWithFrame:CGRectMake(7, totalHeight, 306, 32)];
-        lblTitle.backgroundColor = [UIColor clearColor];
         lblTitle.text = strTitle;
-        [lblTitle resizeToFit];
-        [scroller addSubview:lblTitle];
-        totalHeight += lblTitle.frame.size.height;
-    }
-
+    else
+        lblTitle.text = @"No Title Found";
+    [lblTitle sizeToFit];
+    [scroller addSubview:lblTitle];
+    totalHeight += lblTitle.frame.size.height;
+    
+    // Add author
     if([strAuthor length] != 0)
     {
-        lblAuthor = [[UILabel alloc] initWithFrame:CGRectMake(7, totalHeight, 306, 32)];
+        UILabel* lblAuthor = [[UILabel alloc] initWithFrame:CGRectMake(5 * wRatio, totalHeight, screenWidth - (2 * 5) * wRatio, 1)];
+        lblAuthor.font = [UIFont systemFontOfSize:small_font_size];
         lblAuthor.backgroundColor = [UIColor clearColor];
-        lblAuthor.text = strAuthor;
-        [lblAuthor resizeToFit];
+        lblAuthor.lineBreakMode = UILineBreakModeWordWrap;
+        lblAuthor.numberOfLines = 0;
+        lblAuthor.text = [@"by " stringByAppendingString: strAuthor];
+        [lblAuthor sizeToFit];
         [scroller addSubview:lblAuthor];
         totalHeight += lblAuthor.frame.size.height;
     }
-
-    // Add divider
-    div1 = [[UIView alloc] initWithFrame:CGRectMake(6, totalHeight, 307, 1)];
-    div1.backgroundColor = [UIColor blackColor];
-    [scroller addSubview:div1];
-    totalHeight += div1.frame.size.height;
-
-    // Add image
-    imageView = [[UIImageView alloc] initWithFrame:CGRectMake(7, totalHeight, 120, 160)];
-    [imageView setImageWithURL:[NSURL URLWithString:strThumbnail]
-                      placeholderImage:[UIImage imageNamed:@"first"]];
-    [scroller addSubview:imageView];
-
-    // Add library, publisher, pubyear, and format
-    float infoHeight = totalHeight;
     
+    // Add margin
+    totalHeight += 10 * hRatio;
+    
+    // Add divider
+    UIView* divider = [[UIView alloc] initWithFrame:CGRectMake(5 * wRatio, totalHeight, screenWidth - (2 * 5) * wRatio, 1 * hRatio)];
+    divider.backgroundColor = [UIColor blackColor];
+    [scroller addSubview:divider];
+    totalHeight += divider.frame.size.height;
+    
+    // Add margin
+    totalHeight += 10 * hRatio;
+    
+    // Add image
+    UIImageView* imageView = [[UIImageView alloc] initWithFrame:CGRectMake(5 * wRatio, totalHeight, 120 * wRatio, 160 * hRatio)];
+    imageView.contentMode = UIViewContentModeScaleAspectFit;
+    [imageView  setImageWithURL:[NSURL URLWithString:strThumbnail]
+               placeholderImage:[UIImage imageNamed:@"stub"]
+     ];
+    [scroller addSubview:imageView];
+    
+    // Add library, publisher, pubyear, and format
+    float left_padding = imageView.frame.origin.x + imageView.frame.size.width + 10 * wRatio;
+    float infoHeight = totalHeight;
+    float infoWidth = screenWidth - left_padding - 5 * wRatio;
+    
+    // Add library
     if([strLibrary length] != 0)
     {
-        lblLibrary = [[UILabel alloc] initWithFrame:CGRectMake(135, infoHeight, 179, 32)];
+        // Create custom attributed string
+        NSMutableAttributedString* attrStr = [NSMutableAttributedString attributedStringWithString:[@"Library: " stringByAppendingString:strLibrary]];
+        [attrStr setFont:[UIFont systemFontOfSize:small_font_size]];
+        [attrStr setFont:[UIFont boldSystemFontOfSize:small_font_size] range:NSMakeRange(0,8)];
+        
+        // Create subclassed label
+        OHAttributedLabel* lblLibrary = [[OHAttributedLabel alloc] initWithFrame:CGRectMake(left_padding, infoHeight, infoWidth, 1)];
         lblLibrary.backgroundColor = [UIColor clearColor];
-        lblLibrary.text = strLibrary;
-        [lblLibrary resizeToFit];
+        lblLibrary.lineBreakMode = UILineBreakModeWordWrap;
+        lblLibrary.numberOfLines = 0;
+        lblLibrary.attributedText = attrStr;
+        [lblLibrary sizeToFit];
+        
+        // Add view
         [scroller addSubview:lblLibrary];
+        
+        // Update height
         infoHeight += lblLibrary.frame.size.height;
+        
+        // Add padding
+        infoHeight += 5 * hRatio;
     }
-
+    
     if([strPublisher length] != 0)
     {
-        lblPublisher = [[UILabel alloc] initWithFrame:CGRectMake(135, infoHeight, 179, 32)];
+        // Create custom attributed string
+        NSMutableAttributedString* attrStr = [NSMutableAttributedString attributedStringWithString:[@"Publisher: " stringByAppendingString:strPublisher]];
+        [attrStr setFont:[UIFont systemFontOfSize:small_font_size]];
+        [attrStr setFont:[UIFont boldSystemFontOfSize:small_font_size] range:NSMakeRange(0,10)];
+        
+        // Create subclassed label
+        OHAttributedLabel* lblPublisher = [[OHAttributedLabel alloc] initWithFrame:CGRectMake(left_padding, infoHeight, infoWidth, 1)];
+        lblPublisher.font = [UIFont systemFontOfSize:small_font_size];
         lblPublisher.backgroundColor = [UIColor clearColor];
-        lblPublisher.text = strPublisher;
-        [lblPublisher resizeToFit];
+        lblPublisher.lineBreakMode = UILineBreakModeWordWrap;
+        lblPublisher.numberOfLines = 0;
+        lblPublisher.attributedText = attrStr;
+        [lblPublisher sizeToFit];
+        
+        // Add view
         [scroller addSubview:lblPublisher];
+        
+        // Update height
         infoHeight += lblPublisher.frame.size.height;
+        
+        // Add padding
+        infoHeight += 5 * hRatio;
     }
 
     if([strPubyear length] != 0)
     {
-        lblPubyear = [[UILabel alloc] initWithFrame:CGRectMake(135, infoHeight, 179, 32)];
+        // Create custom attributed string
+        NSMutableAttributedString* attrStr = [NSMutableAttributedString attributedStringWithString:[@"Publication Date: " stringByAppendingString:strPubyear]];
+        [attrStr setFont:[UIFont systemFontOfSize:small_font_size]];
+        [attrStr setFont:[UIFont boldSystemFontOfSize:small_font_size] range:NSMakeRange(0,17)];
+        
+        // Create subclassed label
+        OHAttributedLabel* lblPubyear = [[OHAttributedLabel alloc] initWithFrame:CGRectMake(left_padding, infoHeight, infoWidth, 1)];
         lblPubyear.backgroundColor = [UIColor clearColor];
-        lblPubyear.text = strPubyear;
-        [lblPubyear resizeToFit];
+        lblPubyear.lineBreakMode = UILineBreakModeWordWrap;
+        lblPubyear.numberOfLines = 0;
+        lblPubyear.attributedText = attrStr;
+        [lblPubyear sizeToFit];
+        
+        // Add view
         [scroller addSubview:lblPubyear];
+        
+        // Update height
         infoHeight += lblPubyear.frame.size.height;
+        
+        // Add padding
+        infoHeight += 5 * hRatio;
     }
-
+    
     if([strFormat length] != 0)
     {
-        lblFormat = [[UILabel alloc] initWithFrame:CGRectMake(135, infoHeight, 179, 32)];
+        // Create custom attributed string
+        NSMutableAttributedString* attrStr = [NSMutableAttributedString attributedStringWithString:[@"Format: " stringByAppendingString:strFormat]];
+        [attrStr setFont:[UIFont systemFontOfSize:small_font_size]];
+        [attrStr setFont:[UIFont boldSystemFontOfSize:small_font_size] range:NSMakeRange(0,7)];
+        
+        // Create subclassed label
+        OHAttributedLabel* lblFormat = [[OHAttributedLabel alloc] initWithFrame:CGRectMake(left_padding, infoHeight, infoWidth, 1)];
         lblFormat.backgroundColor = [UIColor clearColor];
-        lblFormat.text = strFormat;
-        [lblFormat resizeToFit];
+        lblFormat.lineBreakMode = UILineBreakModeWordWrap;
+        lblFormat.numberOfLines = 0;
+        lblFormat.attributedText = attrStr;
+        [lblFormat sizeToFit];
+        
+        // Add view
         [scroller addSubview:lblFormat];
+        
+        // Update height
         infoHeight += lblFormat.frame.size.height;
     }
-
-    NSLog([NSString stringWithFormat:@"%f",infoHeight]);
-    NSLog([NSString stringWithFormat:@"%f",(totalHeight + imageView.frame.size.height)]);
     
-    // Adjust height
+    // Calculate which column is longer...
     if(imageView.frame.size.height + totalHeight < infoHeight)
         totalHeight = infoHeight;
     else
         totalHeight += imageView.frame.size.height;
+    
+    // Add padding
+    totalHeight += 10 * hRatio;
+    
+    // Add holdings information
+    int i;
+    int count = [strLocations count];
+    for (i = 0; i < count; i++)
+    {
+        // Get data
+        NSString* strLocation = [strLocations objectAtIndex:i];
+        NSString* strStatus = [strStatuses objectAtIndex:i];
+        NSString* strCallNum = [strCallNums objectAtIndex:i];
+        
+        // Add divider
+        UIView* div = [[UIView alloc] initWithFrame:CGRectMake(5 * wRatio, totalHeight, screenWidth - (5 * 2) * wRatio, 1 * hRatio)];
+        div.backgroundColor = [UIColor blackColor];
+        [scroller addSubview:div];
+        totalHeight += div.frame.size.height;
+        
+        // Add padding
+        totalHeight += 5 * hRatio;
+        
+        // Add Location
+        if([strLocation length] != 0)
+        {
+            // Create custom attributed string
+            NSMutableAttributedString* attrStr = [NSMutableAttributedString attributedStringWithString:[@"Location: " stringByAppendingString:strLocation]];
+            [attrStr setFont:[UIFont systemFontOfSize:small_font_size]];
+            [attrStr setFont:[UIFont boldSystemFontOfSize:small_font_size] range:NSMakeRange(0,9)];
+
+            // Create subclassed label
+            OHAttributedLabel* lblLocation = [[OHAttributedLabel alloc] initWithFrame:CGRectMake(5 * wRatio, totalHeight, screenWidth - (5 * 2) * wRatio, 1)];
+            lblLocation.backgroundColor = [UIColor clearColor];
+            lblLocation.lineBreakMode = UILineBreakModeWordWrap;
+            lblLocation.numberOfLines = 0;
+            lblLocation.attributedText = attrStr;
+            [lblLocation sizeToFit];
+                      
+            // Add view
+            [scroller addSubview:lblLocation];
             
-    // Add description title and summary
+            // Update height
+            totalHeight += lblLocation.frame.size.height;
+            
+            // Add padding
+            totalHeight += 5 * hRatio;
+        }
+        
+        // Add Status
+        if([strStatus length] != 0)
+        {
+            // Create custom attributed string
+            NSMutableAttributedString* attrStr = [NSMutableAttributedString attributedStringWithString:[@"Status: " stringByAppendingString:strStatus]];
+            [attrStr setFont:[UIFont systemFontOfSize:small_font_size]];
+            [attrStr setFont:[UIFont boldSystemFontOfSize:small_font_size] range:NSMakeRange(0,7)];
+            
+            // Create subclassed label
+            OHAttributedLabel* lblStatus = [[OHAttributedLabel alloc] initWithFrame:CGRectMake(5 * wRatio, totalHeight, screenWidth - (5 * 2) * wRatio, 1)];
+            lblStatus.backgroundColor = [UIColor clearColor];
+            lblStatus.lineBreakMode = UILineBreakModeWordWrap;
+            lblStatus.numberOfLines = 0;
+            lblStatus.attributedText = attrStr;
+            [lblStatus sizeToFit];
+
+            // Add view
+            [scroller addSubview:lblStatus];
+            
+            // Update height
+            totalHeight += lblStatus.frame.size.height;
+            
+            // Add padding
+            totalHeight += 5 * hRatio;
+        }
+        
+        // Add call number
+        if([strCallNum length] != 0)
+        {
+            // Create custom attributed string
+            NSMutableAttributedString* attrStr = [NSMutableAttributedString attributedStringWithString:[@"Call No.: " stringByAppendingString:strCallNum]];
+            [attrStr setFont:[UIFont systemFontOfSize:small_font_size]];
+            [attrStr setFont:[UIFont boldSystemFontOfSize:small_font_size] range:NSMakeRange(0,9)];
+            
+            // Create subclassed label
+            OHAttributedLabel* lblCallNum = [[OHAttributedLabel alloc] initWithFrame:CGRectMake(5 * wRatio, totalHeight,  screenWidth - (5 * 2) * wRatio, 1)];
+            lblCallNum.backgroundColor = [UIColor clearColor];
+            lblCallNum.lineBreakMode = UILineBreakModeWordWrap;
+            lblCallNum.numberOfLines = 0;
+            lblCallNum.attributedText = attrStr;
+            [lblCallNum sizeToFit];
+            
+            // Add view
+            [scroller addSubview:lblCallNum];
+            
+            // Update height
+            totalHeight += lblCallNum.frame.size.height;
+            
+            // Add padding
+            totalHeight += 5 * hRatio;
+        }
+    }
+    
+    // Add summary
     if([strSummary length] != 0)
     {
-        // Add descripition label
-        lblDescription = [[UILabel alloc] initWithFrame:CGRectMake(7, totalHeight, 87, 32)];
+        // Add padding
+        totalHeight += 15 * hRatio;
+        
+        // Add "Descripition" label
+        UILabel* lblDescription = [[UILabel alloc] initWithFrame:CGRectMake(10 * wRatio, totalHeight, screenWidth - 15 * wRatio, 1)];
+        lblDescription.font = [UIFont systemFontOfSize:medium_font_size];
         lblDescription.backgroundColor = [UIColor clearColor];
+        lblDescription.lineBreakMode = UILineBreakModeWordWrap;
+        lblDescription.numberOfLines = 0;
         lblDescription.text = @"Description";
-        [lblDescription resizeToFit];
+        [lblDescription sizeToFit];
         [scroller addSubview:lblDescription];
         totalHeight += lblDescription.frame.size.height;
-
-        // Add summary
-        lblSummary = [[UILabel alloc] initWithFrame:CGRectMake(7, totalHeight, 280, 32)];
-        lblSummary.backgroundColor = [UIColor whiteColor];
-        lblSummary.text = strSummary;
-        [lblSummary resizeToFit];
         
-        lblSummary.layer.cornerRadius = 5;
-        lblSummary.layer.borderColor = [UIColor grayColor].CGColor;
-        lblSummary.layer.borderWidth = 1;
-        lblSummary.layer.masksToBounds = YES;
-
+        // Add padding
+        totalHeight += 5 * hRatio;
+        
+        // Add summary
+        UILabel* lblSummary = [[UILabel alloc] initWithFrame:CGRectMake(10 * wRatio, totalHeight + 5 * hRatio, screenWidth - 20 * wRatio, 1)];
+        lblSummary.font = [UIFont systemFontOfSize:medium_font_size];
+        lblSummary.backgroundColor = [UIColor clearColor];
+        lblSummary.lineBreakMode = UILineBreakModeWordWrap;
+        lblSummary.numberOfLines = 0;
+        lblSummary.text = strSummary;
+        [lblSummary sizeToFit];
+        
+        // Add shape behind summary
+        UIView* box = [[UILabel alloc] initWithFrame:CGRectMake(5 * wRatio, totalHeight, screenWidth - 10 * wRatio, lblSummary.frame.size.height + 10 * hRatio)];
+        box.layer.cornerRadius = 5;
+        box.layer.borderColor = [UIColor grayColor].CGColor;
+        box.layer.borderWidth = 1;
+        box.layer.masksToBounds = YES;
+        
+        [scroller addSubview:box];
         [scroller addSubview:lblSummary];
-        totalHeight += lblSummary.frame.size.height;
+        
+        totalHeight += box.frame.size.height;
     }
 
-    scroller.contentSize = CGSizeMake(scroller.frame.size.width, scroller.frame.origin.y +totalHeight);
-    
+    // Resize scroller
+    scroller.contentSize = CGSizeMake(screenWidth, totalHeight);
     [scroller setScrollEnabled:YES];
+   // scroller.backgroundColor = [UIColor whiteColor];
 }
 
 @end

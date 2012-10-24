@@ -10,16 +10,22 @@
 
 @protocol OptionViewControllerDelegate;
 
-@interface Options : UITableViewController
+@interface Options : UIViewController<UITableViewDelegate, UITableViewDataSource>
 {
-    IBOutlet UITableView* tableView;
+    // Device Specific Dimensions
+    CGFloat screenWidth;
+    CGFloat screenHeight;
+    CGFloat wRatio;
+    CGFloat hRatio;
+
+    UITableView* tv;
     NSMutableArray* options;
     
     __unsafe_unretained id<OptionViewControllerDelegate> optionsDelegate;
 }
 
 @property (nonatomic, unsafe_unretained) id optionsDelegate;  
-@property (nonatomic,retain) UITableView* tableView;
+@property (nonatomic,retain) UITableView* tv;
 @end
 
 @protocol OptionViewControllerDelegate <NSObject>
